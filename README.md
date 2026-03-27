@@ -1,4 +1,4 @@
-# SIEVOX — Multimodal Emotion Recognition: Implementation Architecture
+# Multimodal Emotion Recognition: Implementation Architecture
 
 ## System Overview
 
