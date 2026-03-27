@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>D-S 多模态情绪融合算法离线仿真器</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background-color: #f4f7f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+        h1 {
+            text-align: center;
+            color: #1e3a8a;
+            font-size: 24px;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 15px;
+        }
+        .panel-container {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        .control-panel {
+            flex: 1;
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .control-panel h3 {
+            margin-top: 0;
+            color: #0f172a;
+            display: flex;
+            justify-content: space-between;
+        }
+        .slider-group {
+            margin-bottom: 15px;
+        }
+        .slider-group label {
+            display: inline-block;
+            width: 80px;
+            font-weight: bold;
+        }
+        input[type="range"] {
+            width: 200px;
+            vertical-align: middle;
+        }
+        .val-display {
+            display: inline-block;
+            width: 50px;
+            text-align: right;
+            font-family: monospace;
+            color: #2563eb;
+        }
+        .uncertainty {
+            font-size: 14px;
+            color: #64748b;
+            text-align: right;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        #chart-container {
+            width: 100%;
+            height: 500px;
+        }
+        .status-bar {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 6px;
+        }
+        .conflict-low { background-color: #dcfce7; color: #166534; }
+        .conflict-high { background-color: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>多模态 D-S 证据理论仿真</h1>
+    
+    <div class="status-bar" id="statusBar">冲突系数 K = 0.00 (低冲突)</div>
+
+    <div class="panel-container">
+        <div class="control-panel" id="vision-panel">
+            <h3>👁️ 视觉证据 (K210) <span class="uncertainty">不确定度(Θ): <span id="v-u">0.00</span></span></h3>
+            <div class="slider-group">
+                <label>Happy (喜):</label>
+                <input type="range" id="v-0" min="0" max="100" value="60" oninput="updateData()">
+                <span class="val-display" id="v-val-0">0.60</span>
+            </div>
+            <div class="slider-group">
+                <label>Sad (悲):</label>
+                <input type="range" id="v-1" min="0" max="100" value="5" oninput="updateData()">
+                <span class="val-display" id="v-val-1">0.05</span>
+            </div>
+            <div class="slider-group">
+                <label>Neutral(平):</label>
+                <input type="range" id="v-2" min="0" max="100" value="10" oninput="updateData()">
+                <span class="val-display" id="v-val-2">0.10</span>
+            </div>
+            <div class="slider-group">
+                <label>Anger (怒):</label>
+                <input type="range" id="v-3" min="0" max="100" value="0" oninput="updateData()">
+                <span class="val-display" id="v-val-3">0.00</span>
+            </div>
+        </div>
+
+        <div class="control-panel" id="audio-panel">
+            <h3>🎙️ 听觉证据 (ESP32) <span class="uncertainty">不确定度(Θ): <span id="a-u">0.00</span></span></h3>
+            <div class="slider-group">
+                <label>Happy (喜):</label>
+                <input type="range" id="a-0" min="0" max="100" value="10" oninput="updateData()">
+                <span class="val-display" id="a-val-0">0.10</span>
+            </div>
+            <div class="slider-group">
+                <label>Sad (悲):</label>
+                <input type="range" id="a-1" min="0" max="100" value="56" oninput="updateData()">
+                <span class="val-display" id="a-val-1">0.56</span>
+            </div>
+            <div class="slider-group">
+                <label>Neutral(平):</label>
+                <input type="range" id="a-2" min="0" max="100" value="4" oninput="updateData()">
+                <span class="val-display" id="a-val-2">0.04</span>
+            </div>
+            <div class="slider-group">
+                <label>Anger (怒):</label>
+                <input type="range" id="a-3" min="0" max="100" value="0" oninput="updateData()">
+                <span class="val-display" id="a-val-3">0.00</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="chart-container"></div>
+</div>
+
+<script>
+    // 初始化 ECharts
+    const myChart = echarts.init(document.getElementById('chart-container'));
+    
+    // 获取输入值并保证总和不超过1
+    function getNormalizedProbs(prefix) {
+        let probs = [];
+        let sum = 0;
+        for(let i=0; i<4; i++) {
+            let val = parseInt(document.getElementById(`${prefix}-${i}`).value) / 100;
+            probs.push(val);
+            sum += val;
+        }
+        
+        // 如果和大于1，按比例缩小
+        if (sum > 1.0) {
+            probs = probs.map(p => p / sum);
+            sum = 1.0;
+            // 回写滑块以防混淆
+            for(let i=0; i<4; i++) {
+                document.getElementById(`${prefix}-${i}`).value = Math.round(probs[i] * 100);
+            }
+        }
+        
+        let u = 1.0 - sum;
+        
+        // 更新显示文字
+        for(let i=0; i<4; i++) {
+            document.getElementById(`${prefix}-val-${i}`).innerText = probs[i].toFixed(2);
+        }
+        document.getElementById(`${prefix}-u`).innerText = Math.max(0, u).toFixed(2);
+        
+        return { p: probs, u: Math.max(0, u) };
+    }
+
+    // 核心算法：D-S 正交和公式
+    function calculateDSFusion() {
+        const vision = getNormalizedProbs('v');
+        const audio = getNormalizedProbs('a');
+        
+        let m1 = vision.p, u1 = vision.u;
+        let m2 = audio.p, u2 = audio.u;
+        
+        // 计算冲突系数 K
+        let K = 0;
+        for (let i = 0; i < 4; i++) {
+            for (let j = 0; j < 4; j++) {
+                if (i !== j) K += m1[i] * m2[j];
+            }
+        }
+        
+        // 更新状态栏
+        const statusBar = document.getElementById('statusBar');
+        statusBar.innerText = `冲突系数 K = ${K.toFixed(3)} ${K > 0.4 ? '⚠️ (高冲突态：启动信任纠偏)' : '(多模态高度一致)'}`;
+        statusBar.className = `status-bar ${K > 0.4 ? 'conflict-high' : 'conflict-low'}`;
+
+        // 计算融合概率
+        let fused = [];
+        if (K >= 0.999) { // Zadeh悖论保护
+            fused = m1.map((v, i) => (v + m2[i]) / 2);
+        } else {
+            for (let i = 0; i < 4; i++) {
+                let combined = (m1[i] * m2[i]) + (m1[i] * u2) + (u1 * m2[i]);
+                fused.push(combined / (1 - K));
+            }
+        }
+        
+        return { vision: m1, audio: m2, fused: fused };
+    }
+
+    // 渲染图表
+    function renderChart(data) {
+        const option = {
+            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+            legend: { data: ['仅视觉 (FER)', '仅听觉 (SER)', 'D-S 融合后结果'], textStyle: { fontSize: 14 } },
+            grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+            xAxis: {
+                type: 'category',
+                data: ['Happy (高兴)', 'Sad (悲伤/抑郁)', 'Neutral (平静)', 'Anger (愤怒)'],
+                axisLabel: { fontSize: 14, fontWeight: 'bold' }
+            },
+            yAxis: { type: 'value', max: 1.0, name: '概率 / 置信度' },
+            series: [
+                {
+                    name: '仅视觉 (FER)',
+                    type: 'bar',
+                    barGap: 0,
+                    itemStyle: { color: '#8FB8DE' },
+                    label: { show: true, position: 'top', formatter: (p) => p.value.toFixed(2) },
+                    data: data.vision
+                },
+                {
+                    name: '仅听觉 (SER)',
+                    type: 'bar',
+                    itemStyle: { color: '#4F81BD' },
+                    label: { show: true, position: 'top', formatter: (p) => p.value.toFixed(2) },
+                    data: data.audio
+                },
+                {
+                    name: 'D-S 融合后结果',
+                    type: 'bar',
+                    itemStyle: { color: '#8064A2' },
+                    label: { show: true, position: 'top', fontWeight: 'bold', fontSize: 14, formatter: (p) => p.value.toFixed(2) },
+                    data: data.fused
+                }
+            ]
+        };
+        myChart.setOption(option);
+    }
+
+    // 主更新函数
+    function updateData() {
+        const result = calculateDSFusion();
+        renderChart(result);
+    }
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', () => myChart.resize());
+
+    // 初始加载
+    updateData();
+</script>
+
+</body>
+</html>
